@@ -97,7 +97,9 @@ bool RISCVPassConfig::addInstSelector() {
   return false;
 }
 
-void RISCVPassConfig::addPreEmitPass() { addPass(&BranchRelaxationPassID); }
+void RISCVPassConfig::addPreEmitPass() { addPass(&BranchRelaxationPassID);
+  addPass(createRISCVBranchBalancerPass());
+}
 
 void RISCVPassConfig::addPreRegAlloc() {
   addPass(createRISCVMergeBaseOffsetOptPass());

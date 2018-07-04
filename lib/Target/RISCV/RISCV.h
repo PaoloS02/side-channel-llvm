@@ -36,6 +36,9 @@ FunctionPass *createRISCVISelDag(RISCVTargetMachine &TM);
 
 FunctionPass *createRISCVMergeBaseOffsetOptPass();
 void initializeRISCVMergeBaseOffsetOptPass(PassRegistry &);
+
+FunctionPass *createRISCVBranchBalancerPass();
+void initializeRISCVBranchBalancerPass(PassRegistry &);
 }
 
 #endif
