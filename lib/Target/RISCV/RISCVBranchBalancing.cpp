@@ -17,7 +17,7 @@ namespace{
 	
 		static char ID;
 		RISCVBranchBalancer() : MachineFunctionPass(ID) {}
-		MachineDominatorTree *MDT;
+		MachineDominatorTree *MDT, *MDTREF;
 		
 		void getAnalysisUsage(AnalysisUsage &AU) const override {
 			AU.addRequired<MachineDominatorTree>();
@@ -26,7 +26,7 @@ namespace{
 		
 		void equalBlocks(MachineFunction& MF);
 		
-		void findDomTreeLeaves(MachineFunction& MF, MachineDominatorTree& MDT);
+		void findDomTreeLeaves(MachineFunction& MF, MachineDominatorTree& MDT, MachineDominatorTree& MDTREF);
 		
 		bool runOnMachineFunction(MachineFunction& MF) override ;
 		
@@ -42,22 +42,22 @@ INITIALIZE_PASS(RISCVBranchBalancer, "riscv-block-instruction-counter",
 //INITIALIZE_PASS_DEPENDENCY(MachineDominatorTree)
 
 
-void RISCVBranchBalancer::findDomTreeLeaves(MachineFunction& MF, MachineDominatorTree& MDT) {
+void RISCVBranchBalancer::findDomTreeLeaves(MachineFunction& MF, MachineDominatorTree& MDT, MachineDominatorTree& MDTREF) {
 	
 	errs() << MF.getName() << "\n";
 	
 	for(MachineBasicBlock& MB : MF) {
-		errs() << MB.getName() << ":\t" << MDT.getNode(&MB)->getLevel() << "\n";
+		errs() << MB.getName() << ":\t" << MDTREF.getNode(&MB)->getLevel() << "\n";
 	}
 	
 	errs() << "\n\n";
 	
 	for(MachineBasicBlock& MB : MF) {
-		if((MDT.getNode(&MB)->getNumChildren() == 0) && (MB.pred_size() == 1))
+		if((MDTREF.getNode(&MB)->getNumChildren() == 0) && (MB.pred_size() == 1))
 			errs() << MB.getName() << "\n";
 	}
 	
-	errs() << "\nEND\n";
+	errs() << "\nEND\n\n";
 }
 
 
@@ -112,10 +112,11 @@ void RISCVBranchBalancer::equalBlocks(MachineFunction& MF) {
 bool RISCVBranchBalancer::runOnMachineFunction(MachineFunction& MF) {
 			
 			MDT = &getAnalysis<MachineDominatorTree>();
+			MDTREF = &getAnalysis<MachineDominatorTree>();
 			
 			//equalBlocks(MF);
 			
-			findDomTreeLeaves(MF, *MDT);
+			findDomTreeLeaves(MF, *MDT, *MDTREF);
 			
 			return true;
 }
