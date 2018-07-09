@@ -19,12 +19,14 @@ namespace{
 		RISCVBranchBalancer() : MachineFunctionPass(ID) {}
 		MachineDominatorTree *MDT;
 		
-		/*void getAnalysisUsage(AnalysisUsage &AU) const override {
+		void getAnalysisUsage(AnalysisUsage &AU) const override {
 			AU.addRequired<MachineDominatorTree>();
 			MachineFunctionPass::getAnalysisUsage(AU);
-		  }
-		*/
-		void EqualBlocks(MachineFunction& MF);
+		}
+		
+		void equalBlocks(MachineFunction& MF);
+		
+		void findDomTreeLeaves(MachineFunction& MF, MachineDominatorTree& MDT);
 		
 		bool runOnMachineFunction(MachineFunction& MF) override ;
 		
@@ -39,10 +41,31 @@ INITIALIZE_PASS(RISCVBranchBalancer, "riscv-block-instruction-counter",
                 RISCV_BRANCH_BALANCER, false, false)
 //INITIALIZE_PASS_DEPENDENCY(MachineDominatorTree)
 
-void RISCVBranchBalancer::EqualBlocks(MachineFunction& MF) {
+
+void RISCVBranchBalancer::findDomTreeLeaves(MachineFunction& MF, MachineDominatorTree& MDT) {
+	
+	errs() << MF.getName() << "\n";
+	
+	for(MachineBasicBlock& MB : MF) {
+		errs() << MB.getName() << ":\t" << MDT.getNode(&MB)->getLevel() << "\n";
+	}
+	
+	errs() << "\n\n";
+	
+	for(MachineBasicBlock& MB : MF) {
+		if((MDT.getNode(&MB)->getNumChildren() == 0) && (MB.pred_size() == 1))
+			errs() << MB.getName() << "\n";
+	}
+	
+	errs() << "\nEND\n";
+}
+
+
+void RISCVBranchBalancer::equalBlocks(MachineFunction& MF) {
 	int InstrCount = 0;
 	int maxInstrPerBlock = 0;
 	const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
+	
 	
 	for(MachineBasicBlock& MB : MF) {
 		InstrCount = 0;
@@ -87,8 +110,12 @@ void RISCVBranchBalancer::EqualBlocks(MachineFunction& MF) {
 
 
 bool RISCVBranchBalancer::runOnMachineFunction(MachineFunction& MF) {
-		
-			EqualBlocks(MF);
+			
+			MDT = &getAnalysis<MachineDominatorTree>();
+			
+			//equalBlocks(MF);
+			
+			findDomTreeLeaves(MF, *MDT);
 			
 			return true;
 }
