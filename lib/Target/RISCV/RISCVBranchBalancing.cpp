@@ -1,3 +1,4 @@
+#include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "RISCVSubtarget.h"
@@ -17,9 +18,14 @@ namespace{
 	struct RISCVBranchBalancer : public MachineFunctionPass{
 		static char ID;
 		RISCVBranchBalancer() : MachineFunctionPass(ID) {}
+		MachineDominatorTree *MDT;
+		
+		void getAnalysisUsage(AnalysisUsage &AU) const override {
+			AU.addRequired<MachineDominatorTree>();
+		  }
 		
 		
-		bool runOnMachineFunction(MachineFunction& MF){
+		bool runOnMachineFunction(MachineFunction& MF) override {
 		
 			int InstrCount = 0;
 			int maxInstrPerBlock = 0;
@@ -66,13 +72,14 @@ namespace{
 				InstrCount = 0;
 			}
 			
-			return false;
+			return true;
 		}
 		
 	};
 	
 	
 }
+
 
 char RISCVBranchBalancer::ID = 0;
 
