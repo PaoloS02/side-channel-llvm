@@ -44,6 +44,7 @@ INITIALIZE_PASS(RISCVBranchBalancer, "riscv-block-instruction-counter",
 
 void RISCVBranchBalancer::findDomTreeLeaves(MachineFunction& MF, MachineDominatorTree& MDT, MachineDominatorTree& MDTREF) {
 	
+	const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
 	errs() << MF.getName() << "\n";
 	
 	for(MachineBasicBlock& MB : MF) {
@@ -53,8 +54,65 @@ void RISCVBranchBalancer::findDomTreeLeaves(MachineFunction& MF, MachineDominato
 	errs() << "\n\n";
 	
 	for(MachineBasicBlock& MB : MF) {
-		if((MDTREF.getNode(&MB)->getNumChildren() == 0) && (MB.pred_size() == 1))
+	
+		for(MachineInstr &MTerm : MB.terminators()){
+			errs() << MF.getName() << "\tterminator\n";
+			MTerm.dump();
+		}
+		
+		if((MDTREF.getNode(&MB)->getNumChildren() == 0) && (MB.pred_size() == 1)){ //invalidating multiple entry points, for now
 			errs() << MB.getName() << "\n";
+			
+			for(MachineBasicBlock *pred : MB.predecessors()){
+				unsigned int maxInstr = 0, instrCount;
+				
+				for(MachineBasicBlock *succ : pred->successors()){
+					if((succ->size() > maxInstr) && (!MB.isSuccessor(succ))){
+						maxInstr = succ->size();
+					}
+				}
+				
+				for(MachineBasicBlock *succ : pred->successors()){
+					if(MB.isSuccessor(succ)) {
+						MachineBasicBlock *dummyMB = MF.CreateMachineBasicBlock(pred->getBasicBlock());
+						//dummyMB->addSuccessor(succ);
+						//pred->removeSuccessor(succ);
+						//pred->addSuccessor(dummyMB);
+						//dummyMB->transferSuccessorsAndUpdatePHIs(pred);
+					errs() << "NOT BLOCK CREATION: " << dummyMB->size() << "\n";
+					dummyMB->dump();
+					pred->getBasicBlock()->dump();
+					MF.insert(++pred->getIterator(), dummyMB);
+					
+						MachineInstr& MI = pred->back();
+					errs() << "NOT FIRST INSTRUCTION DETECTION IN THE NEWLY CREATED BLOCK\n";
+						
+						for(instrCount = dummyMB->size(); instrCount < maxInstr-1;) {
+							BuildMI(*dummyMB, dummyMB->end(), MI.getDebugLoc(), TII.get(RISCV::ADDI))
+							.addReg(RISCV::X0)
+							.addReg(RISCV::X0)
+							.addImm(0);			//RISC-V NOOP OPERATION: ADDI $X0, $X0, 0
+							instrCount++;
+						}
+						BuildMI(*dummyMB, dummyMB->end(), MI.getDebugLoc(), TII.get(RISCV::JAL))
+						.addReg(RISCV::X0)
+						.addMBB(succ);
+						
+						pred->replaceSuccessor(succ, dummyMB);
+						
+						for(MachineInstr &MTerm : pred->terminators()){
+							if(MTerm.isBranch()){
+								if(succ == MTerm.getOperand(MTerm.getNumOperands()-1).getMBB())
+									MTerm.getOperand(MTerm.getNumOperands()-1).setMBB(dummyMB);
+							}
+						}
+						
+						//createNopBlock();
+					}
+				}
+			}
+		}
+			
 	}
 	
 	errs() << "\nEND\n\n";
