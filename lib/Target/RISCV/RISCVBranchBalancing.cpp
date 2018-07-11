@@ -10,6 +10,12 @@ using namespace llvm;
 
 #define RISCV_BRANCH_BALANCER "RISCV Block Instruction Counter"
 
+struct CostFromMBBToLeaf {
+	MachineBasicBlock *MBB;
+	unsigned int cost;
+};
+
+std::vector<struct CostFromMBBToLeaf> CostsFromMBBToLeaves;
 
 namespace{
 
@@ -45,65 +51,75 @@ INITIALIZE_PASS(RISCVBranchBalancer, "riscv-block-instruction-counter",
 void RISCVBranchBalancer::findDomTreeLeaves(MachineFunction& MF, MachineDominatorTree& MDT, MachineDominatorTree& MDTREF) {
 	
 	const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
-	errs() << MF.getName() << "\n";
+/*	errs() << MF.getName() << "\n";
 	
 	for(MachineBasicBlock& MB : MF) {
 		errs() << MB.getName() << ":\t" << MDTREF.getNode(&MB)->getLevel() << "\n";
 	}
 	
 	errs() << "\n\n";
+*/	
+	unsigned int costToLeaf = 0;
+	unsigned int maxInstr = 0;
+	unsigned int instrCount = 0;
 	
-	for(MachineBasicBlock& MB : MF) {
+	for(MachineBasicBlock& MBB : MF) {
 	
-		for(MachineInstr &MTerm : MB.terminators()){
+		/*for(MachineInstr &MTerm : MBB.terminators()){
 			errs() << MF.getName() << "\tterminator\n";
 			MTerm.dump();
-		}
+		}*/
+		costToLeaf = maxInstr = instrCount = 0;
 		
-		if((MDTREF.getNode(&MB)->getNumChildren() == 0) && (MB.pred_size() == 1)){ //invalidating multiple entry points, for now
-			errs() << MB.getName() << "\n";
+		if((MDTREF.getNode(&MBB)->getNumChildren() == 0) && (MBB.pred_size() == 1)){ //invalidating multiple entry points, for now
+		
+			struct CostFromMBBToLeaf NewCostFromMBBToLeaf;
 			
-			for(MachineBasicBlock *pred : MB.predecessors()){
-				unsigned int maxInstr = 0, instrCount;
+			for(CostFromMBBToLeaf CL : CostsFromMBBToLeaves){
+				if(CL.MBB == &MBB){
+					costToLeaf = CL.cost;
+					errs() << "FOUND:  " << CL.MBB->getParent()->getName() << "\n";
+				}
+			}
+			
+			for(MachineBasicBlock *pred : MBB.predecessors()){
+				//maxInstr = instrCount = 0; //what when we have multiple entry points?
 				
 				for(MachineBasicBlock *succ : pred->successors()){
-					if((succ->size() > maxInstr) && (!MB.isSuccessor(succ))){
+					if((succ->size() > maxInstr) && (!MBB.isSuccessor(succ))){
 						maxInstr = succ->size();
 					}
 				}
 				
 				for(MachineBasicBlock *succ : pred->successors()){
-					if(MB.isSuccessor(succ)) {
-						MachineBasicBlock *dummyMB = MF.CreateMachineBasicBlock(MB.getBasicBlock());
+					if(MBB.isSuccessor(succ)) {
+						MachineBasicBlock *dummyMBB = MF.CreateMachineBasicBlock(MBB.getBasicBlock());
 						//dummyMB->addSuccessor(succ);
 						//pred->removeSuccessor(succ);
 						//pred->addSuccessor(dummyMB);
 						//dummyMB->transferSuccessorsAndUpdatePHIs(pred);
-			errs() << "NOT BLOCK CREATION: " << dummyMB->size() << "\n";
-			dummyMB->dump();
-			pred->getBasicBlock()->dump();
-						MF.insert(++pred->getIterator(), dummyMB);
+			
+						MF.insert(++pred->getIterator(), dummyMBB);
 						
 						MachineInstr& MI = pred->back();
-			errs() << "NOT FIRST INSTRUCTION DETECTION IN THE NEWLY CREATED BLOCK\n";
 						
-						for(instrCount = dummyMB->size(); instrCount < maxInstr-1;) {
-							BuildMI(*dummyMB, dummyMB->end(), MI.getDebugLoc(), TII.get(RISCV::ADDI))
+						for(instrCount = dummyMBB->size(); instrCount < maxInstr+costToLeaf-1;) {
+							BuildMI(*dummyMBB, dummyMBB->end(), MI.getDebugLoc(), TII.get(RISCV::ADDI))
 							.addReg(RISCV::X0)
 							.addReg(RISCV::X0)
 							.addImm(0);			//RISC-V NOOP OPERATION: ADDI $X0, $X0, 0
 							instrCount++;
 						}
-						BuildMI(*dummyMB, dummyMB->end(), MI.getDebugLoc(), TII.get(RISCV::JAL))
+						BuildMI(*dummyMBB, dummyMBB->end(), MI.getDebugLoc(), TII.get(RISCV::JAL))
 						.addReg(RISCV::X0)
 						.addMBB(succ);
 						
-						pred->replaceSuccessor(succ, dummyMB);
+						pred->replaceSuccessor(succ, dummyMBB);
 						
 						for(MachineInstr &MTerm : pred->terminators()){
 							if(MTerm.isBranch()){
 								if(succ == MTerm.getOperand(MTerm.getNumOperands()-1).getMBB())
-									MTerm.getOperand(MTerm.getNumOperands()-1).setMBB(dummyMB);
+									MTerm.getOperand(MTerm.getNumOperands()-1).setMBB(dummyMBB);
 							}
 						}
 						
@@ -114,7 +130,7 @@ void RISCVBranchBalancer::findDomTreeLeaves(MachineFunction& MF, MachineDominato
 				for(MachineBasicBlock *succ : pred->successors()){
 					MachineInstr& MI = succ->instr_front();
 					
-					for(unsigned int instrCount = succ->size(); instrCount < maxInstr; instrCount++){
+					for(unsigned int instrCount = succ->size(); instrCount < maxInstr + costToLeaf; instrCount++){
 						BuildMI(*succ, MI, MI.getDebugLoc(), TII.get(RISCV::ADDI))		
 							.addReg(RISCV::X0)
 							.addReg(RISCV::X0)
@@ -122,12 +138,16 @@ void RISCVBranchBalancer::findDomTreeLeaves(MachineFunction& MF, MachineDominato
 					}
 				}
 				
+				NewCostFromMBBToLeaf.MBB = pred;
+				NewCostFromMBBToLeaf.cost = maxInstr + costToLeaf;
+				CostsFromMBBToLeaves.push_back(NewCostFromMBBToLeaf);
+				errs() << MBB.getParent()->getName() << "  " << MBB.getName() << "\n\tcost: " << costToLeaf << "\n\tmax: " << maxInstr << "\n\n";	
 			}
+			
 		}
 			
 	}
 	
-	errs() << "\nEND\n\n";
 }
 
 
@@ -137,29 +157,29 @@ void RISCVBranchBalancer::equalBlocks(MachineFunction& MF) {
 	const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
 	
 	
-	for(MachineBasicBlock& MB : MF) {
+	for(MachineBasicBlock& MBB : MF) {
 		InstrCount = 0;
 		
-		for(MachineInstr& MI : MB) {
+		for(MachineInstr& MI : MBB) {
 			InstrCount ++;
 		}
-		errs() << InstrCount << "\t" << MB.getFullName() << "\n";
+		errs() << InstrCount << "\t" << MBB.getFullName() << "\n";
 		if(InstrCount > maxInstrPerBlock)
 			maxInstrPerBlock = InstrCount;
 		
 		}
 			
 			
-	for(MachineBasicBlock& MB : MF){
+	for(MachineBasicBlock& MBB : MF){
 		InstrCount = 0;
 		
-		for(MachineInstr& MI : MB){
+		for(MachineInstr& MI : MBB){
 			InstrCount ++;
 		}
-		MachineInstr& MI = MB.instr_front();
+		MachineInstr& MI = MBB.instr_front();
 		
 		for(; InstrCount < maxInstrPerBlock;) {
-			BuildMI(MB, MI, MI.getDebugLoc(), TII.get(RISCV::ADDI))		//RISC-V NOOP OPERATION: ADDI $X0, $X0, 0
+			BuildMI(MBB, MI, MI.getDebugLoc(), TII.get(RISCV::ADDI))		//RISC-V NOOP OPERATION: ADDI $X0, $X0, 0
 				.addReg(RISCV::X0)
 				.addReg(RISCV::X0)
 				.addImm(0);
@@ -168,11 +188,11 @@ void RISCVBranchBalancer::equalBlocks(MachineFunction& MF) {
 	}
 			
 	InstrCount = 0;
-	for(MachineBasicBlock& MB : MF) {
-		for(MachineInstr& MI : MB) {
+	for(MachineBasicBlock& MBB : MF) {
+		for(MachineInstr& MI : MBB) {
 			InstrCount ++;
 		}
-		errs() << InstrCount << "\t" << MB.getFullName() << "\n";
+		errs() << InstrCount << "\t" << MBB.getFullName() << "\n";
 		
 		InstrCount = 0;
 	}	
