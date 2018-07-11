@@ -79,13 +79,13 @@ void RISCVBranchBalancer::findDomTreeLeaves(MachineFunction& MF, MachineDominato
 						//pred->removeSuccessor(succ);
 						//pred->addSuccessor(dummyMB);
 						//dummyMB->transferSuccessorsAndUpdatePHIs(pred);
-					errs() << "NOT BLOCK CREATION: " << dummyMB->size() << "\n";
-					dummyMB->dump();
-					pred->getBasicBlock()->dump();
-					MF.insert(++pred->getIterator(), dummyMB);
-					
+			errs() << "NOT BLOCK CREATION: " << dummyMB->size() << "\n";
+			dummyMB->dump();
+			pred->getBasicBlock()->dump();
+						MF.insert(++pred->getIterator(), dummyMB);
+						
 						MachineInstr& MI = pred->back();
-					errs() << "NOT FIRST INSTRUCTION DETECTION IN THE NEWLY CREATED BLOCK\n";
+			errs() << "NOT FIRST INSTRUCTION DETECTION IN THE NEWLY CREATED BLOCK\n";
 						
 						for(instrCount = dummyMB->size(); instrCount < maxInstr-1;) {
 							BuildMI(*dummyMB, dummyMB->end(), MI.getDebugLoc(), TII.get(RISCV::ADDI))
@@ -110,6 +110,18 @@ void RISCVBranchBalancer::findDomTreeLeaves(MachineFunction& MF, MachineDominato
 						//createNopBlock();
 					}
 				}
+				
+				for(MachineBasicBlock *succ : pred->successors()){
+					MachineInstr& MI = succ->instr_front();
+					
+					for(unsigned int instrCount = succ->size(); instrCount < maxInstr; instrCount++){
+						BuildMI(*succ, MI, MI.getDebugLoc(), TII.get(RISCV::ADDI))		
+							.addReg(RISCV::X0)
+							.addReg(RISCV::X0)
+							.addImm(0);			//RISC-V NOOP OPERATION: ADDI $X0, $X0, 0
+					}
+				}
+				
 			}
 		}
 			
