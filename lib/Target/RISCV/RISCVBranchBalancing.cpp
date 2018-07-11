@@ -74,7 +74,7 @@ void RISCVBranchBalancer::findDomTreeLeaves(MachineFunction& MF, MachineDominato
 				
 				for(MachineBasicBlock *succ : pred->successors()){
 					if(MB.isSuccessor(succ)) {
-						MachineBasicBlock *dummyMB = MF.CreateMachineBasicBlock(pred->getBasicBlock());
+						MachineBasicBlock *dummyMB = MF.CreateMachineBasicBlock(MB.getBasicBlock());
 						//dummyMB->addSuccessor(succ);
 						//pred->removeSuccessor(succ);
 						//pred->addSuccessor(dummyMB);
