@@ -47,10 +47,32 @@ INITIALIZE_PASS(RISCVBranchBalancer, "riscv-block-instruction-counter",
 //INITIALIZE_PASS_DEPENDENCY(MachineDominatorTree)
 
 
-bool hasMDTNode(MachineBasicBlock *MBB, std::vector<MachineBasicBlock *> erasedFromMDT) {
+bool hasToBeErased(MachineBasicBlock *MBB, std::vector<MachineBasicBlock *> oldMDTNodes){
+	for(unsigned int i=0; i < oldMDTNodes.size(); i++){
+		if(oldMDTNodes.at(i) == MBB) {
+	//	errs() << "IN-LIST: " << MBB->getParent()->getName() << "  " << MBB->getName() << "\n";
+			return true;
+			}
+	}
+	
+	return false;
+}
 
-	for(unsigned int i=0; i < erasedFromMDT.size(); i++){
-		if(erasedFromMDT.at(i) == MBB) {
+bool hasBeenErased(MachineBasicBlock *MBB, std::vector<MachineBasicBlock *> erasedMDTNodes) {
+	for(unsigned int i=0; i < erasedMDTNodes.size(); i++){
+		if(erasedMDTNodes.at(i) == MBB) {
+	//	errs() << "IN-LIST: " << MBB->getParent()->getName() << "  " << MBB->getName() << "\n";
+			return true;
+			}
+	}
+	
+	return false;
+}
+
+bool hasMDTNode(MachineBasicBlock *MBB, std::vector<MachineBasicBlock *> notMDTNodes) {
+
+	for(unsigned int i=0; i < notMDTNodes.size(); i++){
+		if(notMDTNodes.at(i) == MBB) {
 	//	errs() << "IN-LIST: " << MBB->getParent()->getName() << "  " << MBB->getName() << "\n";
 			return false;
 			}
@@ -62,7 +84,9 @@ bool hasMDTNode(MachineBasicBlock *MBB, std::vector<MachineBasicBlock *> erasedF
 void RISCVBranchBalancer::findDomTreeLeaves(MachineFunction& MF, MachineDominatorTree& MDT, MachineDominatorTree& MDTREF) {
 	
 	std::vector<struct CostFromMBBToLeaf> CostsFromMBBToLeaves;
-	std::vector<MachineBasicBlock *> erasedFromMDT;
+	std::vector<MachineBasicBlock *> oldMDTNodes;
+	std::vector<MachineBasicBlock *> notMDTNodes;
+	std::vector<MachineBasicBlock *> erasedMDTNodes;
 	const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
 /*	errs() << MF.getName() << "\n";
 	
@@ -85,10 +109,10 @@ void RISCVBranchBalancer::findDomTreeLeaves(MachineFunction& MF, MachineDominato
 			nestLevel = MDT.getNode(&MBB)->getLevel();
 	}
 	
-//	for(;hasMDTNode(MDT.getRoot(), erasedFromMDT);) {
+	for(; nestLevel > 0; nestLevel--) {
 	
 	for(MachineBasicBlock& MBB : MF) {
-	errs() << MBB.getParent()->getName() << "  &MBB content: " << &MBB << "\n";
+//	errs() << MBB.getParent()->getName() << "  &MBB content: " << &MBB << "  " << MBB.getName() <<"\n";
 	
 		/*for(MachineInstr &MTerm : MBB.terminators()){
 			errs() << MF.getName() << "\tterminator\n";
@@ -98,9 +122,18 @@ void RISCVBranchBalancer::findDomTreeLeaves(MachineFunction& MF, MachineDominato
 	//errs() << MBB.getParent()->getName() << "  " << MBB.getName() << "  pre\n\n";
 		/*Finding the leaves: nodes with no children in the dominator 
 		  tree and just one predecessor in the control flow graph.*/
+		if(hasMDTNode(&MBB, notMDTNodes)){
+	errs() << MBB.getName() << "  hasMDTNode\n";
+	
+	for(unsigned int ci = 0; ci < MDT.getNode(&MBB)->getChildren().size(); ci++){
+		errs() << "  " << MDT.getNode(&MBB)->getChildren().at(ci)->getBlock()->getName();
+	}	
+	
+	errs() << "\n";
+	
 		if((MDT.getNode(&MBB)->getNumChildren() == 0) && (MBB.pred_size() == 1)){ //invalidating multiple entry points, for now
 		
-			errs() << "pre\n\n";
+//			errs() << "pre\n\n";
 			
 			/*Balancing operations: to be performed by considering all 
 			  concurrent children. If the node has more predecessors in
@@ -112,6 +145,7 @@ void RISCVBranchBalancer::findDomTreeLeaves(MachineFunction& MF, MachineDominato
 		//	errs() << "pre\n\n";
 				//maxInstr = instrCount = 0; //what when we have multiple entry points?
 		//	errs() << "BEGINNING  " << MBB.getParent()->getName() << "  " << MBB.getName() << "\n\tcost: " << costToLeaf << "\n\tmax: " << maxInstr << "\n\n";
+		errs() << "BEGINNING  " << MBB.getParent()->getName() << "  " << MBB.getName() << "\n";
 				waitForBranch = false;
 				waitForLevel = false;
 				costToLeaf = maxInstr = instrCount = 0;
@@ -120,7 +154,7 @@ void RISCVBranchBalancer::findDomTreeLeaves(MachineFunction& MF, MachineDominato
 				//for(unsigned int child = 0; child < (MDT.getNode(pred))->getChildren().size(); child++){
 				//	if(((MDT.getNode(pred))->getChildren().at(child))->getNumChildren() != 0)
 				for(MachineBasicBlock *succ : pred->successors()){
-					if(hasMDTNode(succ, erasedFromMDT)) {
+					if(hasMDTNode(succ, notMDTNodes)) {
 						if(MDT.getNode(succ)->getNumChildren() != 0)
 							waitForBranch = true;
 					}
@@ -132,7 +166,8 @@ void RISCVBranchBalancer::findDomTreeLeaves(MachineFunction& MF, MachineDominato
 				
 				
 				if(!waitForBranch && !waitForLevel) {
-		errs() << "preB\n\n";				
+//		errs() << "preB\n\n";	
+		errs() << "DON'T WAIT  " << MBB.getParent()->getName() << "  " << MBB.getName() << "\n";
 				
 				struct CostFromMBBToLeaf NewCostFromMBBToLeaf;
 		
@@ -168,11 +203,12 @@ void RISCVBranchBalancer::findDomTreeLeaves(MachineFunction& MF, MachineDominato
 												//successor chain in order to be applied to all the levels
 //					errs() << "brothers:  " << succ->getParent()->getName() << "  " << succ->getName() << "\n\n";
 						MachineBasicBlock *dummyMBB = MF.CreateMachineBasicBlock(MBB.getBasicBlock());
+		errs() << "NEED DUMMY  " << MBB.getParent()->getName() << "  " << MBB.getName() << "\n";
 						//dummyMBB->addSuccessor(succ);
 						//pred->removeSuccessor(succ);
 						//pred->addSuccessor(dummyMBB);
 						//dummyMB->transferSuccessorsAndUpdatePHIs(pred);
-		errs() << "preC\n\n";	
+//		errs() << "preC\n\n";	
 						MF.insert(++pred->getIterator(), dummyMBB);
 						
 						MachineInstr& MI = pred->back();
@@ -202,6 +238,8 @@ void RISCVBranchBalancer::findDomTreeLeaves(MachineFunction& MF, MachineDominato
 							}
 						}
 						
+						notMDTNodes.push_back(dummyMBB);
+						
 						//createNopBlock();
 					}
 				}
@@ -228,8 +266,9 @@ void RISCVBranchBalancer::findDomTreeLeaves(MachineFunction& MF, MachineDominato
 				//for(MachineBasicBlock *pred : MBB.predecessors()){
 					//for(MachineBasicBlock *succ : pred->successors()){
 				
-						erasedFromMDT.push_back(&MBB);
-		errs() << "ADDED TO ERASE-LIST: " << MBB.getParent()->getName() << "  " << MBB.getName() << "\n";				
+						oldMDTNodes.push_back(&MBB);
+		errs() << "ADDED TO ERASE-LIST: " << MBB.getParent()->getName() << " " << MBB.getName() << " level: " << nestLevel << " blockLevel: " << MDT.getNode(&MBB)->getLevel() << "\n";
+						notMDTNodes.push_back(&MBB);
 				//	}
 				//}
 					
@@ -244,22 +283,27 @@ void RISCVBranchBalancer::findDomTreeLeaves(MachineFunction& MF, MachineDominato
 			
 		}
 		
-		
+		}
 			
 	}
 	
 	
 	for(MachineBasicBlock& MBB : MF) {	
 					
-		if(!hasMDTNode(&MBB, erasedFromMDT)){
-errs() << "ERASING: " << MBB.getParent()->getName() << "  " << MBB.getName() << "\n";
+		if(hasToBeErased(&MBB, oldMDTNodes) && !hasBeenErased(&MBB, erasedMDTNodes)){
+//errs() << "ERASING: " << MBB.getParent()->getName() << "  " << MBB.getName() << "\n";
 			MDT.eraseNode(&MBB);
-errs() << "ERASED: " << MBB.getParent()->getName() << "  " << MBB.getName() << "\n";
+//errs() << "ERASED: " << MBB.getParent()->getName() << "  " << MBB.getName() << "\n";
+/*			if(hasMDTNode(&MBB, notMDTNodes))
+				errs() << MBB.getName() << "  not in the old list\n";
+			else
+				errs() << MBB.getName() << "  still in the old list\n";
+*/			erasedMDTNodes.push_back(&MBB);
 		}
 	}
 	
-	
-//	}
+	errs() << "Iteration " << nestLevel << "\n";
+	}
 	
 }
 
