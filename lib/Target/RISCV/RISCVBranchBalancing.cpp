@@ -8,7 +8,7 @@
 using namespace llvm;
 
 
-#define RISCV_BRANCH_BALANCER "RISCV Block Instruction Counter"
+#define RISCV_BRANCH_BALANCER_NAME "RISCV Block Instruction Counter"
 
 struct CostFromMBBToLeaf {
 	MachineBasicBlock *MBB;
@@ -30,6 +30,10 @@ namespace{
 			MachineFunctionPass::getAnalysisUsage(AU);
 		}
 		
+		StringRef getPassName() const override {
+ 			return RISCV_BRANCH_BALANCER_NAME;
+		}
+		
 		void equalBlocks(MachineFunction& MF);
 		void findDomTreeLeaves(MachineFunction& MF, MachineDominatorTree& MDT, MachineDominatorTree& MDTREF);
 		
@@ -42,8 +46,8 @@ namespace{
 
 char RISCVBranchBalancer::ID = 0;
 
-INITIALIZE_PASS(RISCVBranchBalancer, "riscv-block-instruction-counter",
-                RISCV_BRANCH_BALANCER, false, false)
+INITIALIZE_PASS(RISCVBranchBalancer, "riscv-branch-balancer",
+                RISCV_BRANCH_BALANCER_NAME, false, false)
 //INITIALIZE_PASS_DEPENDENCY(MachineDominatorTree)
 
 
@@ -55,7 +59,7 @@ unsigned int computeCostToLeaf(MachineBasicBlock *DestMBB, MachineBasicBlock *So
 		sum += MidMBB->size();
 		MidMBB = *MidMBB->succ_begin();
 	}
-	errs() << SourceMBB->getParent()->getName() << "FROM  : " << SourceMBB->getName() << "  TO: " << DestMBB->getName() <<"  COST: " << sum << "\n";
+//	errs() << SourceMBB->getParent()->getName() << "FROM  : " << SourceMBB->getName() << "  TO: " << DestMBB->getName() <<"  COST: " << sum << "\n";
 	return sum;
 }
 
@@ -74,36 +78,20 @@ bool isReachableFrom(MachineBasicBlock *DestMBB, MachineBasicBlock *SourceMBB) {
 MachineBasicBlock* firstNotDominatedSuccessor(MachineBasicBlock *MBB, MachineDominatorTree& MDT) {
 	
 	MachineBasicBlock *base = nullptr;
-	//int i=0;
-	errs() << "++++++++ initial\n";
-	errs() << MBB->getParent()->getName() << "  &MBB content: " << MBB << "  " << MBB->getName() <<"\n";
-	errs() << "++++++++\n";
+	
+//	errs() << "++++++++ initial\n";
+//	errs() << MBB->getParent()->getName() << "  &MBB content: " << MBB << "  " << MBB->getName() <<"\n";
+//	errs() << "++++++++\n";
 	
 	for(base = MBB; MDT.dominates(MBB, base) && (base->succ_size() > 0);) {
 		
-		base = *base->succ_begin();
-		
-		errs() << "--------------- depth successors search:\n";
-		
+		base = *base->succ_begin();		
+/*		errs() << "--------------- depth successors search:\n";
 		errs() << base->getParent()->getName() << "  &MBB content: " << base << "  " << base->getName() <<"\n";
-		
 		errs() << "---------------\n";
-		/*for(auto MBBSucc = MBB->succ_begin(); MBBSucc != MBB->succ_end(); MBBSucc++){
-			base = &*MBBSucc;
-			break;
-		}*/
+*/		
 	}
-	/*for(;MDT.dominates(MBB, base) || base == nullptr;) {
-			errs() << "preE\n\n";
-		for(MachineBasicBlock *MBBSucc : base->successors()){
-				errs() << "preF\n\n";
-			if(i == 0) {
-				base = MBBSucc;
-				break;
-			}
-		}
-	}*/
-			errs() << "preG\n\n";
+	
 	return base;
 }
 
@@ -161,9 +149,6 @@ void RISCVBranchBalancer::findDomTreeLeaves(MachineFunction& MF, MachineDominato
 	unsigned int instrCount = 0;
 	unsigned int nestLevel = 0;
 	
-	bool waitForBranch = false;
-	bool waitForLevel = false;
-	
 	for(MachineBasicBlock& MBB : MF) {
 		if(MDT.getNode(&MBB)->getLevel() > nestLevel)
 			nestLevel = MDT.getNode(&MBB)->getLevel();
@@ -171,263 +156,142 @@ void RISCVBranchBalancer::findDomTreeLeaves(MachineFunction& MF, MachineDominato
 	
 	for(; nestLevel > 0; nestLevel--) {
 	
-	for(MachineBasicBlock& MBB : MF) {
-	errs() << "Initial check:  " << MBB.getParent()->getName() << "  &MBB content: " << &MBB << "  " << MBB.getName() <<"\n";
-	
-		/*for(MachineInstr &MTerm : MBB.terminators()){
-			errs() << MF.getName() << "\tterminator\n";
-			MTerm.dump();
-		}*/
-		costToLeaf = maxInstr = instrCount = 0;
-	//errs() << MBB.getParent()->getName() << "  " << MBB.getName() << "  pre\n\n";
-		/*Finding the leaves: nodes with no children in the dominator 
-		  tree and just one predecessor in the control flow graph.*/
-//		if(hasMDTNode(&MBB, notMDTNodes)){
-//	errs() << MBB.getName() << "  hasMDTNode\n";
-/*	
-	for(unsigned int ci = 0; ci < MDT.getNode(&MBB)->getChildren().size(); ci++){
-		errs() << "  " << MDT.getNode(&MBB)->getChildren().at(ci)->getBlock()->getName();
-	}	
-	
-	errs() << "\n";
-*/	
-	errs() << "preInit\n\n";
-		//if((MDT.getNode(&MBB)->getNumChildren() == 0) && (MBB.pred_size() == 1)){ //invalidating multiple entry points, for now
-	if(hasMDTNode(&MBB, notMDTNodes)) {
-		if(MDT.getNode(&MBB)->getLevel() == nestLevel) {
-			errs() << "pre\n\n";
+		for(MachineBasicBlock& MBB : MF) {
+//	errs() << "Initial check:  " << MBB.getParent()->getName() << "  &MBB content: " << &MBB << "  " << MBB.getName() <<"\n";
+			costToLeaf = maxInstr = instrCount = 0;
 			
-			/*Balancing operations: to be performed by considering all 
-			  concurrent children. If the node has more predecessors in
-			  the CFG such balancing must be made on all the predecerrors 
-			  together or on each predecessor separatelly. According to
-			  that the max number of instruction will need to be reset
-			  to 0 at each iteration*/
-			for(MachineBasicBlock *pred : MBB.predecessors()){
-			errs() << "preB\n\n";
-				//maxInstr = instrCount = 0; //what when we have multiple entry points?
-		//	errs() << "BEGINNING  " << MBB.getParent()->getName() << "  " << MBB.getName() << "\n\tcost: " << costToLeaf << "\n\tmax: " << maxInstr << "\n\n";
-//		errs() << "BEGINNING  " << MBB.getParent()->getName() << "  " << MBB.getName() << "\n";
-			//	waitForBranch = false;
-			//	waitForLevel = false;
-				costToLeaf = maxInstr = instrCount = 0;
-				//std::vector<DomTreeNodeBase *>::iterator child;
-				
-				//for(unsigned int child = 0; child < (MDT.getNode(pred))->getChildren().size(); child++){
-				//	if(((MDT.getNode(pred))->getChildren().at(child))->getNumChildren() != 0)
-	/*			for(MachineBasicBlock *succ : pred->successors()){
-					if(hasMDTNode(succ, notMDTNodes)) {
-						if(MDT.getNode(succ)->getNumChildren() != 0)
-							waitForBranch = true;
-					}
-				}
-	*/
-				
-			//	if(MDT.getNode(&MBB)->getLevel() < nestLevel)
-			//		waitForLevel = true;
-				
-				
-		//		if(!waitForBranch && !waitForLevel) {
-//		errs() << "preB\n\n";	
-//		errs() << "DON'T WAIT  " << MBB.getParent()->getName() << "  " << MBB.getName() << "\n";
-				
-				struct CostFromMBBToLeaf NewCostFromMBBToLeaf;
+			/*Finding the leaves: nodes with no children in the dominator 
+			  tree and just one predecessor in the control flow graph.*/
+
+			if(hasMDTNode(&MBB, notMDTNodes)) {
+				if(MDT.getNode(&MBB)->getLevel() == nestLevel) {
+					
+					
+					/*Balancing operations: to be performed by considering all 
+					  concurrent children. If the node has more predecessors in
+					  the CFG such balancing must be made on all the predecerrors 
+					  together or on each predecessor separatelly. According to
+					  that the max number of instruction will need to be reset
+					  to 0 at each iteration*/
+					  
+					for(MachineBasicBlock *pred : MBB.predecessors()){ //what when we have multiple entry points?
+						costToLeaf = maxInstr = instrCount = 0;
+
+						struct CostFromMBBToLeaf NewCostFromMBBToLeaf;
 		
-				/*Searching previously computed costs. If this leaf 
-				  is original it will have no previous cost*/
-		errs() << "preC\n\n";
-				MachineBasicBlock *BalanceBase = firstNotDominatedSuccessor(&MBB, MDT);
-		errs() << "preD\n\n";
-				/*Searching the maximum number of instructions among the 'brothers'*/
-			/*	for(MachineBasicBlock *succ : pred->successors()){
-					if(!MBB.isSuccessor(succ)){
-						costToLeaf = 0;
-						for(CostFromMBBToLeaf CL : CostsFromMBBToLeaves){
-							if(CL.MBB == succ){
-								costToLeaf = CL.cost;
-		//					errs() << "FOUND:  " << CL.MBB->getParent()->getName() << "  " << MBB.getName() << "\n";
+						MachineBasicBlock *BalanceBase = firstNotDominatedSuccessor(&MBB, MDT);
+						
+						for(MachineBasicBlock *succ : pred->successors()){
+							if(isReachableFrom(BalanceBase, succ)) {
+								costToLeaf = computeCostToLeaf(BalanceBase, succ);
+								if(costToLeaf > maxInstr)
+									maxInstr = costToLeaf; 
 							}
 						}
-						if((succ->size()+costToLeaf > maxInstr) && (!MBB.isSuccessor(succ))){
-							maxInstr = succ->size()+costToLeaf;
-						}
-					}
-
-				}
-			*/	
-				
-				for(MachineBasicBlock *succ : pred->successors()){
-					if(isReachableFrom(BalanceBase, succ)) {
-						costToLeaf = computeCostToLeaf(BalanceBase, succ);
-						if(costToLeaf > maxInstr)
-							maxInstr = costToLeaf; 
-					}
-				}
-		errs() << "preDA\n\n";		
-				/*Searching for direct paths between the predecessor 
-				  and the successor of the current block, if any, there's 
-				  a chance to skip the current block according to some 
-				  conditions. Such chance must be eliminated by interleaving 
-				  a dummy block equal in size*/
-				for(MachineBasicBlock *succ : pred->successors()){
-					if(succ != &MBB && isReachableFrom(succ, &MBB)) { //FIXME: might need to recurse this on the 
-												//successor chain in order to be applied to all the levels
-//					errs() << "brothers:  " << succ->getParent()->getName() << "  " << succ->getName() << "\n\n";
-						MachineBasicBlock *dummyMBB = MF.CreateMachineBasicBlock(MBB.getBasicBlock());
-		errs() << "NEED DUMMY  " << MBB.getParent()->getName() << "  " << MBB.getName() << "  succ:  " << succ->getName() << "\n";
+						
+	
+						/*Searching for direct paths between the predecessor 
+						  and the successor of the current block, if any, there's 
+						  a chance to skip the current block according to some 
+						  conditions. Such chance must be eliminated by interleaving 
+						  a dummy block equal in size*/
+						for(MachineBasicBlock *succ : pred->successors()){
+							if(succ != &MBB && isReachableFrom(succ, &MBB)) {
+								MachineBasicBlock *dummyMBB = MF.CreateMachineBasicBlock(MBB.getBasicBlock());
+//		errs() << "NEED DUMMY  " << MBB.getParent()->getName() << "  " << MBB.getName() << "  succ:  " << succ->getName() << "\n";
 						//dummyMBB->addSuccessor(succ);
 						//pred->removeSuccessor(succ);
 						//pred->addSuccessor(dummyMBB);
 						//dummyMB->transferSuccessorsAndUpdatePHIs(pred);
-		errs() << "preC\n\n";	
-						MF.insert(++pred->getIterator(), dummyMBB);
-			errs() << "here\n";			
-						MachineInstr& MI = pred->back();
-			errs() << "here  maxInstr:  " << maxInstr << "  dummy size:  " << dummyMBB->size() << "\n";			
+	
+								MF.insert(++pred->getIterator(), dummyMBB);
+								MachineInstr& MI = pred->back();
+//			errs() << "here  maxInstr:  " << maxInstr << "  dummy size:  " << dummyMBB->size() << "\n";			
 						/*The cost of previously processed nested nodes is considered too (costToLeaf)*/
-						for(instrCount = dummyMBB->size(); instrCount+1 < maxInstr;) { //to avoid negative maxInstr that would be a problem for unsigned values
-							BuildMI(*dummyMBB, dummyMBB->end(), MI.getDebugLoc(), TII.get(RISCV::ADDI))
-							.addReg(RISCV::X0)
-							.addReg(RISCV::X0)
-							.addImm(0);			//RISC-V NOOP OPERATION: ADDI $X0, $X0, 0
-							instrCount++;
-						}
-			errs() << "here\n";				
-						/*Setting the links with the new block*/
-						BuildMI(*dummyMBB, dummyMBB->end(), MI.getDebugLoc(), TII.get(RISCV::JAL))
-						.addReg(RISCV::X0)
-						.addMBB(succ);
-						
-						//pred->replaceSuccessor(succ, dummyMBB);
-						pred->removeSuccessor(succ);
-						dummyMBB->addSuccessor(succ);
-			errs() << "here\n";			
-						for(MachineInstr &MTerm : pred->terminators()){
-							if(MTerm.isBranch()){
-								if(succ == MTerm.getOperand(MTerm.getNumOperands()-1).getMBB())
-									MTerm.getOperand(MTerm.getNumOperands()-1).setMBB(dummyMBB);
+								for(instrCount = dummyMBB->size(); instrCount+1 < maxInstr;) { //to avoid negative maxInstr that would be a problem for unsigned values
+									BuildMI(*dummyMBB, dummyMBB->end(), MI.getDebugLoc(), TII.get(RISCV::ADDI))
+									.addReg(RISCV::X0)
+									.addReg(RISCV::X0)
+									.addImm(0);			//RISC-V NOOP OPERATION: ADDI $X0, $X0, 0
+									instrCount++;
+								}
+											
+								/*Setting the links with the new block*/
+								BuildMI(*dummyMBB, dummyMBB->end(), MI.getDebugLoc(), TII.get(RISCV::JAL))
+								.addReg(RISCV::X0)
+								.addMBB(succ);
+								
+								//pred->replaceSuccessor(succ, dummyMBB);
+								pred->removeSuccessor(succ);
+								dummyMBB->addSuccessor(succ);
+										
+								for(MachineInstr &MTerm : pred->terminators()){
+									if(MTerm.isBranch()){
+										if(succ == MTerm.getOperand(MTerm.getNumOperands()-1).getMBB())
+											MTerm.getOperand(MTerm.getNumOperands()-1).setMBB(dummyMBB);
+									}
+								}
+								notMDTNodes.push_back(dummyMBB);
+							} //need a dummy block?
+						} //check brothers
+				
+						/*Balancing all the brothers, also the dummy ones*/
+						for(MachineBasicBlock *succ : pred->successors()){
+							if(isReachableFrom(BalanceBase, succ)) {
+								MachineInstr& MI = succ->instr_front();
+					
+								for(unsigned int instrCount = computeCostToLeaf(BalanceBase, succ); 
+												 instrCount < maxInstr; 
+												 instrCount++)
+								{
+									BuildMI(*succ, MI, MI.getDebugLoc(), TII.get(RISCV::ADDI))		
+										.addReg(RISCV::X0)
+										.addReg(RISCV::X0)
+										.addImm(0);			//RISC-V NOOP OPERATION: ADDI $X0, $X0, 0
+								}
 							}
 						}
-			errs() << "here\n";			
-						notMDTNodes.push_back(dummyMBB);
-						
-						//createNopBlock();
-					}
-				}
-			errs() << "preDB\n\n";	
-				/*Balancing all the brothers, also the dummy ones*/
-				for(MachineBasicBlock *succ : pred->successors()){
-					if(isReachableFrom(BalanceBase, succ)) {
-						MachineInstr& MI = succ->instr_front();
-					
-						for(unsigned int instrCount = computeCostToLeaf(BalanceBase, succ); instrCount < maxInstr; instrCount++){
-							BuildMI(*succ, MI, MI.getDebugLoc(), TII.get(RISCV::ADDI))		
-								.addReg(RISCV::X0)
-								.addReg(RISCV::X0)
-								.addImm(0);			//RISC-V NOOP OPERATION: ADDI $X0, $X0, 0
-						}
-						
-					}
-				}
 				
-				/*Keeping record of the costs of the leaves*/
-				NewCostFromMBBToLeaf.MBB = pred;
-				NewCostFromMBBToLeaf.cost = maxInstr;
-				CostsFromMBBToLeaves.push_back(NewCostFromMBBToLeaf);
-			//	errs() << MBB.getParent()->getName() << "  " << MBB.getName() << "\n\tcost: " << costToLeaf << "\n\tmax: " << maxInstr << "\n\n";
-				
-//		errs() << "\n";
-				//for(MachineBasicBlock *pred : MBB.predecessors()){
-					//for(MachineBasicBlock *succ : pred->successors()){
-				
-	//					oldMDTNodes.push_back(&MBB);
-	//	errs() << "ADDED TO ERASE-LIST: " << MBB.getParent()->getName() << " " << MBB.getName() << " level: " << nestLevel << " blockLevel: " << MDT.getNode(&MBB)->getLevel() << "\n";
-	//					notMDTNodes.push_back(&MBB);
-				//	}
-				//}
-					
-//		errs() << "\n!!!!!\n";
-			
-			//	} //waitForBranch
-			
-		errs() << "preDC\n\n";	
-			}
-			
-			
-			
-		}
-	}
-		errs() << "preDD\n\n";
-//		}
-			
-	}
-	
-	/*
-	for(MachineBasicBlock& MBB : MF) {	
-					
-		if(hasToBeErased(&MBB, oldMDTNodes) && !hasBeenErased(&MBB, erasedMDTNodes)){
-//errs() << "ERASING: " << MBB.getParent()->getName() << "  " << MBB.getName() << "\n";
-			MDT.eraseNode(&MBB);
-//errs() << "ERASED: " << MBB.getParent()->getName() << "  " << MBB.getName() << "\n";
-			if(hasMDTNode(&MBB, notMDTNodes))
-				errs() << MBB.getName() << "  not in the old list\n";
-			else
-				errs() << MBB.getName() << "  still in the old list\n";
-			erasedMDTNodes.push_back(&MBB);
-		}
-	}
-	*/
-	errs() << "Iteration " << nestLevel << "\n";
-	}
-	
+						/*Keeping record of the costs of the leaves*/
+						NewCostFromMBBToLeaf.MBB = pred;
+						NewCostFromMBBToLeaf.cost = maxInstr;
+						CostsFromMBBToLeaves.push_back(NewCostFromMBBToLeaf);
+
+					} //for all the predecessors
+				} //check nest level
+			} //hasMDTNode
+		} //MBB:MF
+	} //nest level
 }
 
 
 void RISCVBranchBalancer::equalBlocks(MachineFunction& MF) {
-	int InstrCount = 0;
-	int maxInstrPerBlock = 0;
+	unsigned int InstrCount = 0;
+	unsigned int maxInstrPerBlock = 0;
 	const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
 	
 	
 	for(MachineBasicBlock& MBB : MF) {
-		InstrCount = 0;
-		
-		for(MachineInstr& MI : MBB) {
-			InstrCount ++;
-		}
 		errs() << InstrCount << "\t" << MBB.getFullName() << "\n";
-		if(InstrCount > maxInstrPerBlock)
-			maxInstrPerBlock = InstrCount;
-		
+		if(MBB.size() > maxInstrPerBlock)
+			maxInstrPerBlock = MBB.size();
 		}
 			
 			
 	for(MachineBasicBlock& MBB : MF){
-		InstrCount = 0;
-		
-		for(MachineInstr& MI : MBB){
-			InstrCount ++;
-		}
 		MachineInstr& MI = MBB.instr_front();
-		
-		for(; InstrCount < maxInstrPerBlock;) {
+		for(InstrCount = MBB.size(); InstrCount < maxInstrPerBlock; InstrCount++) {
 			BuildMI(MBB, MI, MI.getDebugLoc(), TII.get(RISCV::ADDI))		//RISC-V NOOP OPERATION: ADDI $X0, $X0, 0
 				.addReg(RISCV::X0)
 				.addReg(RISCV::X0)
 				.addImm(0);
-			InstrCount++;
 		}
 	}
-			
-	InstrCount = 0;
+	
 	for(MachineBasicBlock& MBB : MF) {
-		for(MachineInstr& MI : MBB) {
-			InstrCount ++;
-		}
-		errs() << InstrCount << "\t" << MBB.getFullName() << "\n";
-		
-		InstrCount = 0;
+		errs() << MBB.size() << "\t" << MBB.getFullName() << "\n";
 	}	
+
 }
 
 
