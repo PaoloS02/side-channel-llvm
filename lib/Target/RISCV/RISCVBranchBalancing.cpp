@@ -34,6 +34,7 @@ namespace{
  			return RISCV_BRANCH_BALANCER_NAME;
 		}
 		
+		void displayInfo(MachineFunction& MF);
 		void equalBlocks(MachineFunction& MF);
 		void findDomTreeLeaves(MachineFunction& MF, MachineDominatorTree& MDT, MachineDominatorTree& MDTREF);
 		
@@ -50,6 +51,10 @@ INITIALIZE_PASS(RISCVBranchBalancer, "riscv-branch-balancer",
                 RISCV_BRANCH_BALANCER_NAME, false, false)
 //INITIALIZE_PASS_DEPENDENCY(MachineDominatorTree)
 
+
+/*unsigned RISCVInstrCycleCount(MachineInstr *MI) {
+	
+}*/
 
 unsigned int computeCostToLeaf(MachineBasicBlock *DestMBB, MachineBasicBlock *SourceMBB) {
 	MachineBasicBlock *MidMBB = SourceMBB;
@@ -128,6 +133,7 @@ bool hasMDTNode(MachineBasicBlock *MBB, std::vector<MachineBasicBlock *> notMDTN
 	
 	return true;
 }
+
 
 void RISCVBranchBalancer::findDomTreeLeaves(MachineFunction& MF, MachineDominatorTree& MDT, MachineDominatorTree& MDTREF) {
 	
@@ -295,6 +301,27 @@ void RISCVBranchBalancer::equalBlocks(MachineFunction& MF) {
 }
 
 
+void RISCVBranchBalancer::displayInfo(MachineFunction& MF) {
+	/*const TargetInstrInfo *TII = MF.getSubtarget().getInstrInfo();
+	const InstrItineraryData *ItinData = MF.getSubtarget().getInstrItineraryData();
+	const InstrStage *IST;
+	*/
+	//unsigned int cycles = 0;
+	//const MCInstrDesc & 	getDesc ();
+	//MI.getDesc().getSchedClass();
+	errs() << MF.getName() << "\n";
+	for(MachineBasicBlock& MBB : MF) {
+		errs() << "  " << MBB.getName() << "\n";
+	//	cycles = 0;
+		for(MachineInstr& MI : MBB) {
+			errs() << "    " << MI.getOpcode() << "  " << ((MI.getOpcode()/10)%14)+1 << "  ";
+			MI.dump();
+		//	errs() << "      " << MI.getOpcode() << ", cycles: " << "\n";
+		}
+	}
+}
+
+
 bool RISCVBranchBalancer::runOnMachineFunction(MachineFunction& MF) {
 			
 			MDT = &getAnalysis<MachineDominatorTree>();
@@ -303,6 +330,7 @@ bool RISCVBranchBalancer::runOnMachineFunction(MachineFunction& MF) {
 			//equalBlocks(MF);
 			
 			findDomTreeLeaves(MF, *MDT, *MDTREF);
+			displayInfo(MF);
 			
 			return true;
 }
