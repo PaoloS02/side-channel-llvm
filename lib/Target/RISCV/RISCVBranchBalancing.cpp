@@ -23,7 +23,7 @@ namespace{
 	
 		static char ID;
 		RISCVBranchBalancer() : MachineFunctionPass(ID) {}
-		MachineDominatorTree *MDT, *MDTREF;
+		MachineDominatorTree *MDT;
 		
 		void getAnalysisUsage(AnalysisUsage &AU) const override {
 			AU.addRequired<MachineDominatorTree>();
@@ -36,7 +36,7 @@ namespace{
 		
 		void displayInfo(MachineFunction& MF);
 		void balanceBlockSizes(MachineFunction& MF);
-		void balanceBranchSizes(MachineFunction& MF, MachineDominatorTree& MDT, MachineDominatorTree& MDTREF);
+		void balanceBranchSizes(MachineFunction& MF, MachineDominatorTree& MDT);
 		
 		bool runOnMachineFunction(MachineFunction& MF) override ;
 		
@@ -135,21 +135,14 @@ bool hasMDTNode(MachineBasicBlock *MBB, std::vector<MachineBasicBlock *> notMDTN
 }
 
 
-void RISCVBranchBalancer::balanceBranchSizes(MachineFunction& MF, MachineDominatorTree& MDT, MachineDominatorTree& MDTREF) {
+void RISCVBranchBalancer::balanceBranchSizes(MachineFunction& MF, MachineDominatorTree& MDT) {
 	
 	std::vector<struct CostFromMBBToLeaf> CostsFromMBBToLeaves;
 	std::vector<MachineBasicBlock *> oldMDTNodes;
 	std::vector<MachineBasicBlock *> notMDTNodes;
 	std::vector<MachineBasicBlock *> erasedMDTNodes;
 	const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
-/*	errs() << MF.getName() << "\n";
 	
-	for(MachineBasicBlock& MB : MF) {
-		errs() << MB.getName() << ":\t" << MDTREF.getNode(&MB)->getLevel() << "\n";
-	}
-	
-	errs() << "\n\n";
-*/	
 	unsigned int costToLeaf = 0;
 	unsigned int maxInstr = 0;
 	unsigned int instrCount = 0;
@@ -325,11 +318,10 @@ void RISCVBranchBalancer::displayInfo(MachineFunction& MF) {
 bool RISCVBranchBalancer::runOnMachineFunction(MachineFunction& MF) {
 			
 			MDT = &getAnalysis<MachineDominatorTree>();
-			MDTREF = &getAnalysis<MachineDominatorTree>();
 			
 			//balanceBlockSizes(MF);
 			
-			balanceBranchSizes(MF, *MDT, *MDTREF);
+			balanceBranchSizes(MF, *MDT);
 			displayInfo(MF);
 			
 			return true;
