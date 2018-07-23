@@ -15,6 +15,10 @@ struct CostFromMBBToLeaf {
 	unsigned int cost;
 };
 
+struct costModel {
+	unsigned opcode;
+	unsigned cost;
+};
 
 
 namespace{
@@ -53,19 +57,135 @@ INITIALIZE_PASS(RISCVBranchBalancer, "riscv-branch-balancer",
 //INITIALIZE_PASS_DEPENDENCY(MachineDominatorTree)
 
 
-/*fake cycle cost functions*/
+void detectInstr(MachineInstr& MI) {
+	MCInstrDesc MID = MI.getDesc();
+	if(MID.isAdd()) {
+//		errs() << MI.getOpcode() << "  add\n";
+//		MI.dump();
+	} else if(MID.isMoveReg()) {
+//		errs() << MI.getOpcode() << "  movereg\n";
+//		MI.dump();
+//	else if(MID.isTerminator()) {
+//		errs() << MI.getOpcode() << "  terminator\n";
+//		MI.dump();
+//	} if(MID.isBranch()) {
+//		errs() << MI.getOpcode() << "  branch\n";
+//		MI.dump();
+	} else if(MID.isIndirectBranch()) {
+//		errs() << MI.getOpcode() << "  indirect branch\n";
+//		MI.dump();
+	} else if(MID.isConditionalBranch()) {
+//		errs() << MI.getOpcode() << "  conditional branch\n";
+//		MI.dump();
+	} else if(MID.isUnconditionalBranch()) {
+//		errs() << MI.getOpcode() << "  unconditional branch\n";
+//		MI.dump();
+	} else if(MID.isCompare()) {
+//		errs() << MI.getOpcode() << "  compare\n";
+//		MI.dump();
+	} else if(MID.isMoveImmediate()) {
+//		errs() << MI.getOpcode() << "  move immediate\n";
+//		MI.dump();
+	} else if(MID.isBitcast()) {
+//		errs() << MI.getOpcode() << "  bitcast\n";
+//		MI.dump();
+	} else if(MID.isSelect()) {
+//		errs() << MI.getOpcode() << "  select\n";
+//		MI.dump();
+	} else if(MID.mayLoad()) {
+//		errs() << MI.getOpcode() << "  may load\n";
+//		MI.dump();
+	} else if(MID.mayStore()) {
+//		errs() << MI.getOpcode() << "  may store\n";
+//		MI.dump();
+	} else if(MID.isCall()) {
+	} else if(MID.isReturn()) {
+//		errs() << MI.getOpcode() << "  may store\n";
+//		MI.dump();
+	} else {
+//		errs() << MI.getOpcode() << "  unknown\n";
+//		MI.dump();
+errs() << MI.getOpcode() << "  ";
+MI.dump();
+	}
+}
+
+
+/*---------fake cycle cost functions---------*/
+
+
+/*unsigned instrCyclesCount(MachineInstr& MI) {
+	return (unsigned)((MI.getOpcode()/10)%14)+1;
+}*/
+
+
+/*if you have a custom cost model for your architecture
+  you should inserti it here. Load and Store instructions
+  might need a proper model that takes into account the 
+  delays caused by memory accesses.
+  The else case covers unspecified instructions and
+  arithmetic operators. If you have a model that
+  corresponds to an unspecified instructions you should
+  add an else if voice to the BOTTOM of the list BEFORE 
+  the else case.
+  */
 
 unsigned instrCyclesCount(MachineInstr& MI) {
-	return (unsigned)((MI.getOpcode()/10)%14)+1;
+	MCInstrDesc MID = MI.getDesc();
+	if(MID.isAdd()) {
+		return 1;
+	} else if(MID.isMoveReg()) {
+		return 2;
+	} else if(MID.isIndirectBranch()) {
+		return 5;
+	} else if(MID.isConditionalBranch()) {
+		return 6;
+	} else if(MID.isUnconditionalBranch()) {
+		return 4;
+	} else if(MID.isCompare()) {
+		return 2;
+	} else if(MID.isMoveImmediate()) {
+		return 4;
+	} else if(MID.isBitcast()) {
+		return 4;
+	} else if(MID.isSelect()) {
+		return 5;
+	} else if(MID.mayLoad()) {
+		return 10;
+	} else if(MID.mayStore()) {
+		return 15;
+	} else if(MID.isCall()) {
+		return 50;
+	} else if(MID.isReturn()) {
+		return 4;
+	} else {
+		return (unsigned)((MI.getOpcode()/10)%14)+1;
+	}
 }
+
+/*
+unsigned instrCyclesCount(MachineInstr& MI) {
+	switch(MI.getOpcode()) {
+		case RISCV::ADDI:
+		case RISCV::LW:
+		case RISCV::LH:
+		case RISCV::LB:
+	}
+}
+*/
+
 
 unsigned blockCyclesCount(MachineBasicBlock& MBB) {
 	unsigned cycles = 0;
 	for(MachineInstr &MI : MBB) {
-		cycles += ((MI.getOpcode()/10)%14)+1;
+	//	cycles += ((MI.getOpcode()/10)%14)+1;
+		cycles += instrCyclesCount(MI);
 	}
 	return cycles;
 }
+
+/*-------------------------------------------*/
+
 
 unsigned int computeCyclesToLeaf(MachineBasicBlock *DestMBB, MachineBasicBlock *SourceMBB) {
 	MachineBasicBlock *MidMBB = SourceMBB;
@@ -220,7 +340,7 @@ void RISCVBranchBalancer::balanceBranchCycles(MachineFunction& MF, MachineDomina
 						for(MachineBasicBlock *succ : pred->successors()){
 							if(succ != &MBB && isReachableFrom(succ, &MBB)) {
 								MachineBasicBlock *dummyMBB = MF.CreateMachineBasicBlock(MBB.getBasicBlock());
-//		errs() << "NEED DUMMY  " << MBB.getParent()->getName() << "  " << MBB.getName() << "  succ:  " << succ->getName() << "\n";
+	//	errs() << "NEED DUMMY  " << MBB.getParent()->getName() << "  " << MBB.getName() << "  succ:  " << succ->getName() << "\n";
 						//dummyMBB->addSuccessor(succ);
 						//pred->removeSuccessor(succ);
 						//pred->addSuccessor(dummyMBB);
@@ -228,30 +348,39 @@ void RISCVBranchBalancer::balanceBranchCycles(MachineFunction& MF, MachineDomina
 	
 								MF.insert(++pred->getIterator(), dummyMBB);
 								MachineInstr& MI = pred->back();
-//			errs() << "here  maxInstr:  " << maxInstr << "  dummy size:  " << dummyMBB->size() << "\n";			
+	//		errs() << "here  maxCycles:  " << maxCycles << "  dummy size:  " << blockCyclesCount(*dummyMBB) << "\n";			
 						/*The cost of previously processed nested nodes is considered too (costToLeaf)*/
 								
-								/*Setting the links with the new block*/
-								BuildMI(*dummyMBB, dummyMBB->end(), MI.getDebugLoc(), TII.get(RISCV::JAL))
-								.addReg(RISCV::X0)
+								/*Setting the links with the new block*/ 
+								/*FIXME: need to copy the exact branch 
+								type from the original block. Is it ever 
+								different from a PseudoBR?*/
+								BuildMI(*dummyMBB, dummyMBB->end(), MI.getDebugLoc(), TII.get(RISCV::PseudoBR))
 								.addMBB(succ);
-								
+	//				errs() << "  dummy size:  " << blockCyclesCount(*dummyMBB) << "\n";			
 								for(cyclesCount = blockCyclesCount(*dummyMBB); cyclesCount < maxCycles;) {
-									BuildMI(*dummyMBB, dummyMBB->front(), MI.getDebugLoc(), TII.get(RISCV::ADDI))
+				//					errs() << "  dummy size:  " << blockCyclesCount(*dummyMBB) << "\n";
+									MachineInstrBuilder MIB = BuildMI(*dummyMBB, dummyMBB->front(), MI.getDebugLoc(), TII.get(RISCV::ADDI))
 									.addReg(RISCV::X0)
 									.addReg(RISCV::X0)
 									.addImm(0);			//RISC-V NOOP OPERATION: ADDI $X0, $X0, 0
-									cyclesCount += 1;
+									cyclesCount += instrCyclesCount(*(MIB.getInstr()));
+									
+		//							errs() << "dummy cycle incr: " << instrCyclesCount(*(MIB.getInstr())) << "  max: " << maxCycles << "\n";
 								}
-								
+		//			errs() << "here  maxCycles:  " << maxCycles << "  dummy size:  " << blockCyclesCount(*dummyMBB) << "\n";			
 								//pred->replaceSuccessor(succ, dummyMBB);
 								pred->removeSuccessor(succ);
 								dummyMBB->addSuccessor(succ);
 										
 								for(MachineInstr &MTerm : pred->terminators()){
 									if(MTerm.isBranch()){
-										if(succ == MTerm.getOperand(MTerm.getNumOperands()-1).getMBB())
-											MTerm.getOperand(MTerm.getNumOperands()-1).setMBB(dummyMBB);
+										for(MachineOperand& MOP : MTerm.operands()){
+											if(MOP.isMBB()){
+												if(succ == MOP.getMBB())
+													MOP.setMBB(dummyMBB);
+											}
+										}
 									}
 								}
 								notMDTNodes.push_back(dummyMBB);
@@ -264,13 +393,13 @@ void RISCVBranchBalancer::balanceBranchCycles(MachineFunction& MF, MachineDomina
 								MachineInstr& MI = succ->instr_front();
 					
 								for(unsigned int cyclesCount = computeCyclesToLeaf(BalanceBase, succ); 
-												 cyclesCount < maxCycles; 
-												 cyclesCount++)
+												 cyclesCount < maxCycles;)
 								{
-									BuildMI(*succ, MI, MI.getDebugLoc(), TII.get(RISCV::ADDI))		
+									MachineInstrBuilder MIB = BuildMI(*succ, MI, MI.getDebugLoc(), TII.get(RISCV::ADDI))		
 										.addReg(RISCV::X0)
 										.addReg(RISCV::X0)
 										.addImm(0);			//RISC-V NOOP OPERATION: ADDI $X0, $X0, 0
+									cyclesCount += instrCyclesCount(*(MIB.getInstr()));
 								}
 							}
 						}
@@ -370,7 +499,7 @@ void RISCVBranchBalancer::balanceBranchSizes(MachineFunction& MF, MachineDominat
 								}
 											
 								/*Setting the links with the new block*/
-								BuildMI(*dummyMBB, dummyMBB->end(), MI.getDebugLoc(), TII.get(RISCV::JAL))
+								BuildMI(*dummyMBB, dummyMBB->end(), MI.getDebugLoc(), TII.get(RISCV::PseudoBR))
 								.addReg(RISCV::X0)
 								.addMBB(succ);
 								
@@ -449,8 +578,8 @@ void RISCVBranchBalancer::balanceBlockSizes(MachineFunction& MF) {
 
 
 void RISCVBranchBalancer::displayInfo(MachineFunction& MF) {
-	/*const TargetInstrInfo *TII = MF.getSubtarget().getInstrInfo();
-	const InstrItineraryData *ItinData = MF.getSubtarget().getInstrItineraryData();
+	const TargetInstrInfo *TII = MF.getSubtarget().getInstrInfo();
+	/*const InstrItineraryData *ItinData = MF.getSubtarget().getInstrItineraryData();
 	const InstrStage *IST;
 	*/
 	//unsigned int cycles = 0;
@@ -459,11 +588,12 @@ void RISCVBranchBalancer::displayInfo(MachineFunction& MF) {
 	errs() << MF.getName() << "\n";
 	for(MachineBasicBlock& MBB : MF) {
 		errs() << "  " << MBB.getName() << "  cycles: " << blockCyclesCount(MBB) << "\n";
-	//	cycles = 0;
 	//	for(MachineInstr& MI : MBB) {
+	//		detectInstr(MI);
 	//		errs() << "    " << MI.getOpcode() << "  " << ((MI.getOpcode()/10)%14)+1 << "  ";
 	//		MI.dump();
 		//	errs() << "      " << MI.getOpcode() << ", cycles: " << "\n";
+		//	errs() << "      " << MI.getOpcode() << ", " << TII->getName(MI.getOpcode()) << "  operands  " << MI.getNumOperands() << "  cycles:  " << instrCyclesCount(MI) << "\n";
 	//	}
 	}
 }
@@ -472,6 +602,8 @@ void RISCVBranchBalancer::displayInfo(MachineFunction& MF) {
 bool RISCVBranchBalancer::runOnMachineFunction(MachineFunction& MF) {
 			
 			MDT = &getAnalysis<MachineDominatorTree>();
+			
+			std::vector<costModel> costVector;
 			
 			//balanceBlockSizes(MF);
 			
