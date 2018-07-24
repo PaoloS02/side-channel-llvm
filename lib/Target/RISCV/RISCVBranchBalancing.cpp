@@ -8,7 +8,7 @@
 using namespace llvm;
 
 
-#define RISCV_BRANCH_BALANCER_NAME "RISCV Block Instruction Counter"
+#define RISCV_BRANCH_BALANCER_NAME "RISCV Branch Balancer"
 
 struct CostFromMBBToLeaf {
 	MachineBasicBlock *MBB;
