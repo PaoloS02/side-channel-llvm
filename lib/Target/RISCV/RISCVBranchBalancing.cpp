@@ -129,7 +129,7 @@ MI.dump();
   add an else if voice to the BOTTOM of the list BEFORE 
   the else case.
   */
-
+/*
 unsigned instrCyclesCount(MachineInstr& MI) {
 	MCInstrDesc MID = MI.getDesc();
 	if(MID.isAdd()) {
@@ -162,17 +162,51 @@ unsigned instrCyclesCount(MachineInstr& MI) {
 		return (unsigned)((MI.getOpcode()/10)%14)+1;
 	}
 }
+*/
 
-/*
 unsigned instrCyclesCount(MachineInstr& MI) {
 	switch(MI.getOpcode()) {
 		case RISCV::ADDI:
+			if(MI.getOperand(0).getReg() == RISCV::X0 &&
+			   MI.getOperand(1).getReg() == RISCV::X0 &&
+			   MI.getOperand(2).getImm() == 0)
+			   	return 1;
+		case RISCV::ADD:
+		case RISCV::SUB:
+			return 3;
+		case RISCV::AND:
+		case RISCV::ANDI:
+		case RISCV::OR:
+		case RISCV::ORI:
+		case RISCV::XOR:
+		case RISCV::XORI:
+			return 2;
 		case RISCV::LW:
 		case RISCV::LH:
 		case RISCV::LB:
+		case RISCV::LBU:
+		case RISCV::LUI:
+			return 5;
+		case RISCV::SW:
+		case RISCV::SH:
+		case RISCV::SB:
+			return 4;
+		case RISCV::BEQ:
+		case RISCV::BNE:
+			return 4;
+		case RISCV::PseudoBR:
+			return 3;
+		case RISCV::JAL:	//call instructions
+			return 10;
+		case RISCV::PseudoCALL:
+			return 20;
+		case RISCV::PseudoRET:
+			return 2;
+		default:
+			return MI.getOpcode()%11;
 	}
 }
-*/
+
 
 
 unsigned blockCyclesCount(MachineBasicBlock& MBB) {
@@ -588,13 +622,13 @@ void RISCVBranchBalancer::displayInfo(MachineFunction& MF) {
 	errs() << MF.getName() << "\n";
 	for(MachineBasicBlock& MBB : MF) {
 		errs() << "  " << MBB.getName() << "  cycles: " << blockCyclesCount(MBB) << "\n";
-	//	for(MachineInstr& MI : MBB) {
+		//for(MachineInstr& MI : MBB) {
 	//		detectInstr(MI);
 	//		errs() << "    " << MI.getOpcode() << "  " << ((MI.getOpcode()/10)%14)+1 << "  ";
 	//		MI.dump();
 		//	errs() << "      " << MI.getOpcode() << ", cycles: " << "\n";
 		//	errs() << "      " << MI.getOpcode() << ", " << TII->getName(MI.getOpcode()) << "  operands  " << MI.getNumOperands() << "  cycles:  " << instrCyclesCount(MI) << "\n";
-	//	}
+		//}
 	}
 }
 
