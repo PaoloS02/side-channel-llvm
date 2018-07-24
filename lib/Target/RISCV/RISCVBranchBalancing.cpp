@@ -42,6 +42,7 @@ namespace{
 		void balanceBlockSizes(MachineFunction& MF);
 		void balanceBranchSizes(MachineFunction& MF, MachineDominatorTree& MDT);
 		void balanceBranchCycles(MachineFunction& MF, MachineDominatorTree& MDT);
+		void balanceBranchCyclesWithNops(MachineFunction& MF, MachineDominatorTree& MDT);
 		
 		bool runOnMachineFunction(MachineFunction& MF) override ;
 		
@@ -221,6 +222,21 @@ unsigned blockCyclesCount(MachineBasicBlock& MBB) {
 /*-------------------------------------------*/
 
 
+std::vector<MachineInstr *> getIntermInstr(MachineBasicBlock *DestMBB, MachineBasicBlock *SourceMBB) {
+	std::vector<MachineInstr *> instrList;
+	MachineBasicBlock *MidMBB = SourceMBB;
+	
+	for(; MidMBB != DestMBB && MidMBB->succ_size() != 0;) {
+		for(MachineInstr& MI : *MidMBB) {
+			instrList.push_back(&MI);
+		}
+		MidMBB = *MidMBB->succ_begin();
+	}
+	
+	return instrList;
+} 
+
+
 unsigned int computeCyclesToLeaf(MachineBasicBlock *DestMBB, MachineBasicBlock *SourceMBB) {
 	MachineBasicBlock *MidMBB = SourceMBB;
 	unsigned int sum = 0;
@@ -312,7 +328,169 @@ bool hasMDTNode(MachineBasicBlock *MBB, std::vector<MachineBasicBlock *> notMDTN
 }
 
 
+
 void RISCVBranchBalancer::balanceBranchCycles(MachineFunction& MF, MachineDominatorTree& MDT) {
+	
+	std::vector<struct CostFromMBBToLeaf> CostsFromMBBToLeaves;
+	std::vector<MachineBasicBlock *> oldMDTNodes;
+	std::vector<MachineBasicBlock *> notMDTNodes;
+	std::vector<MachineBasicBlock *> erasedMDTNodes;
+	const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
+	
+	unsigned int cyclesToLeaf = 0;
+	unsigned int maxCycles = 0;
+	unsigned int cyclesCount = 0;
+	unsigned int nestLevel = 0;
+	
+	for(MachineBasicBlock& MBB : MF) {
+		if(MDT.getNode(&MBB)->getLevel() > nestLevel)
+			nestLevel = MDT.getNode(&MBB)->getLevel();
+	}
+	
+	for(; nestLevel > 0; nestLevel--) {
+	
+		for(MachineBasicBlock& MBB : MF) {
+//	errs() << "Initial check:  " << MBB.getParent()->getName() << "  &MBB content: " << &MBB << "  " << MBB.getName() <<"\n";
+			cyclesToLeaf = maxCycles = cyclesCount = 0;
+			
+			/*Finding the leaves: nodes with no children in the dominator 
+			  tree and just one predecessor in the control flow graph.*/
+
+			if(hasMDTNode(&MBB, notMDTNodes)) {
+				if(MDT.getNode(&MBB)->getLevel() == nestLevel) {
+					
+					
+					/*Balancing operations: to be performed by considering all 
+					  concurrent children. If the node has more predecessors in
+					  the CFG such balancing must be made on all the predecerrors 
+					  together or on each predecessor separatelly. According to
+					  that the max number of instruction will need to be reset
+					  to 0 at each iteration*/
+					  
+					for(MachineBasicBlock *pred : MBB.predecessors()){ //what when we have multiple entry points?
+						cyclesToLeaf = maxCycles = cyclesCount = 0;
+
+						struct CostFromMBBToLeaf NewCostFromMBBToLeaf;
+		
+						MachineBasicBlock *BalanceBase = firstNotDominatedSuccessor(&MBB, MDT);
+						MachineBasicBlock *maxSucc = &MBB;
+						
+						for(MachineBasicBlock *succ : pred->successors()){
+							if(isReachableFrom(BalanceBase, succ)) {
+								cyclesToLeaf = computeCyclesToLeaf(BalanceBase, succ);
+								if(cyclesToLeaf > maxCycles) {
+									maxCycles = cyclesToLeaf;
+									maxSucc = succ;
+								}
+							}
+						}
+						
+						std::vector<MachineInstr *> InstrOnPathA = getIntermInstr(BalanceBase, &MBB);
+						std::vector<MachineInstr *> InstrOnPathB = getIntermInstr(BalanceBase, maxSucc);
+						
+						std::vector<MachineInstr *> InstrOnPath;
+						InstrOnPath.reserve(InstrOnPathA.size() + InstrOnPathB.size());
+						InstrOnPath.insert(InstrOnPath.end(), InstrOnPathA.begin(), InstrOnPathA.end());
+						InstrOnPath.insert(InstrOnPath.end(), InstrOnPathB.begin(), InstrOnPathB.end());
+						
+					/*	errs() << MF.getName() << "\n";
+						errs() << "form " << MBB.getName() << " & " << maxSucc->getName() << "  to  " << BalanceBase->getName() << "\n";
+						
+						for(MachineInstr *MMI : InstrOnPath) {
+							errs() << "check vector:  " << MMI << "  " << MMI->getOpcode() << "  " << TII.getName(MMI->getOpcode()) << "\n";
+						}
+					*/	
+						
+						/*Searching for direct paths between the predecessor 
+						  and the successor of the current block, if any, there's 
+						  a chance to skip the current block according to some 
+						  conditions. Such chance must be eliminated by interleaving 
+						  a dummy block equal in size*/
+						for(MachineBasicBlock *succ : pred->successors()){
+							if(succ != &MBB && isReachableFrom(succ, &MBB)) {
+								MachineBasicBlock *dummyMBB = MF.CreateMachineBasicBlock(MBB.getBasicBlock());
+	//	errs() << "NEED DUMMY  " << MBB.getParent()->getName() << "  " << MBB.getName() << "  succ:  " << succ->getName() << "\n";
+						//dummyMBB->addSuccessor(succ);
+						//pred->removeSuccessor(succ);
+						//pred->addSuccessor(dummyMBB);
+						//dummyMB->transferSuccessorsAndUpdatePHIs(pred);
+								
+								MF.insert(++pred->getIterator(), dummyMBB);
+								MachineInstr& MI = pred->back();
+	//		errs() << "here  maxCycles:  " << maxCycles << "  dummy size:  " << blockCyclesCount(*dummyMBB) << "\n";			
+						/*The cost of previously processed nested nodes is considered too (costToLeaf)*/
+								
+								/*Setting the links with the new block*/ 
+								/*FIXME: need to copy the exact branch 
+								type from the original block. Is it ever 
+								different from a PseudoBR?*/
+								BuildMI(*dummyMBB, dummyMBB->end(), MI.getDebugLoc(), TII.get(RISCV::PseudoBR))
+									.addMBB(succ);
+	//				errs() << "  dummy size:  " << blockCyclesCount(*dummyMBB) << "\n";			
+								for(cyclesCount = blockCyclesCount(*dummyMBB); cyclesCount < maxCycles;) {
+				//					errs() << "  dummy size:  " << blockCyclesCount(*dummyMBB) << "\n";
+				
+									MachineInstrBuilder MIB = BuildMI(*dummyMBB, dummyMBB->front(), 
+																	  MI.getDebugLoc(), TII.get(RISCV::ADDI))
+										.addReg(RISCV::X0)
+										.addReg(RISCV::X0)
+										.addImm(0);			//RISC-V NOOP OPERATION: ADDI $X0, $X0, 0
+									
+									cyclesCount += instrCyclesCount(*(MIB.getInstr()));
+									
+		//							errs() << "dummy cycle incr: " << instrCyclesCount(*(MIB.getInstr())) << "  max: " << maxCycles << "\n";
+								}
+		//			errs() << "here  maxCycles:  " << maxCycles << "  dummy size:  " << blockCyclesCount(*dummyMBB) << "\n";			
+								//pred->replaceSuccessor(succ, dummyMBB);
+								pred->removeSuccessor(succ);
+								dummyMBB->addSuccessor(succ);
+										
+								for(MachineInstr &MTerm : pred->terminators()){
+									if(MTerm.isBranch()){
+										for(MachineOperand& MOP : MTerm.operands()){
+											if(MOP.isMBB()){
+												if(succ == MOP.getMBB())
+													MOP.setMBB(dummyMBB);
+											}
+										}
+									}
+								}
+								notMDTNodes.push_back(dummyMBB);
+							} //need a dummy block?
+						} //check brothers
+				
+						/*Balancing all the brothers, also the dummy ones*/
+						for(MachineBasicBlock *succ : pred->successors()){
+							if(isReachableFrom(BalanceBase, succ)) {
+								MachineInstr& MI = succ->instr_front();
+					
+								for(unsigned int cyclesCount = computeCyclesToLeaf(BalanceBase, succ); 
+												 cyclesCount < maxCycles;)
+								{
+									MachineInstrBuilder MIB = BuildMI(*succ, MI, MI.getDebugLoc(), TII.get(RISCV::ADDI))		
+										.addReg(RISCV::X0)
+										.addReg(RISCV::X0)
+										.addImm(0);			//RISC-V NOOP OPERATION: ADDI $X0, $X0, 0
+									cyclesCount += instrCyclesCount(*(MIB.getInstr()));
+								}
+							}
+						}
+				
+						/*Keeping record of the costs of the leaves*/
+						NewCostFromMBBToLeaf.MBB = pred;
+						NewCostFromMBBToLeaf.cost = maxCycles;
+						CostsFromMBBToLeaves.push_back(NewCostFromMBBToLeaf);
+
+					} //for all the predecessors
+				} //check nest level
+			} //hasMDTNode
+		} //MBB:MF
+	} //nest level
+}
+
+
+
+void RISCVBranchBalancer::balanceBranchCyclesWithNops(MachineFunction& MF, MachineDominatorTree& MDT) {
 	
 	std::vector<struct CostFromMBBToLeaf> CostsFromMBBToLeaves;
 	std::vector<MachineBasicBlock *> oldMDTNodes;
@@ -642,6 +820,7 @@ bool RISCVBranchBalancer::runOnMachineFunction(MachineFunction& MF) {
 			//balanceBlockSizes(MF);
 			
 		//	balanceBranchSizes(MF, *MDT);
+		//	balanceBranchCyclesWithNops(MF, *MDT);
 			balanceBranchCycles(MF, *MDT);
 			displayInfo(MF);
 			
