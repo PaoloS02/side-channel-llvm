@@ -38,7 +38,7 @@ namespace{
  			return RISCV_BRANCH_BALANCER_NAME;
 		}
 		
-		void displayInfo(MachineFunction& MF);
+		void displayInfo(MachineFunction& MF, MachineDominatorTree& MDT);
 		void balanceBlockSizes(MachineFunction& MF);
 		void balanceBranchSizes(MachineFunction& MF, MachineDominatorTree& MDT);
 		void balanceBranchCycles(MachineFunction& MF, MachineDominatorTree& MDT);
@@ -455,7 +455,9 @@ void RISCVBranchBalancer::balanceBranchCycles(MachineFunction& MF, MachineDomina
 										}
 									}
 								}
-								notMDTNodes.push_back(dummyMBB);
+								
+								MDT.addNewBlock(dummyMBB, pred);
+								//notMDTNodes.push_back(dummyMBB);
 							} //need a dummy block?
 						} //check brothers
 				
@@ -789,8 +791,9 @@ void RISCVBranchBalancer::balanceBlockSizes(MachineFunction& MF) {
 }
 
 
-void RISCVBranchBalancer::displayInfo(MachineFunction& MF) {
-	const TargetInstrInfo *TII = MF.getSubtarget().getInstrInfo();
+void RISCVBranchBalancer::displayInfo(MachineFunction& MF, MachineDominatorTree& MDT) {
+	//const TargetInstrInfo *TII = MF.getSubtarget().getInstrInfo();
+	unsigned nestLevel = 0;
 	/*const InstrItineraryData *ItinData = MF.getSubtarget().getInstrItineraryData();
 	const InstrStage *IST;
 	*/
@@ -799,7 +802,12 @@ void RISCVBranchBalancer::displayInfo(MachineFunction& MF) {
 	//MI.getDesc().getSchedClass();
 	errs() << MF.getName() << "\n";
 	for(MachineBasicBlock& MBB : MF) {
-		errs() << "  " << MBB.getName() << "  cycles: " << blockCyclesCount(MBB) << "\n";
+		errs() << "  ";
+		nestLevel = MDT.getNode(&MBB)->getLevel();
+		for(unsigned i=0; i<nestLevel; i++){
+			errs() << "  ";
+		}
+		errs() << MBB.getName() << "  cycles: " << blockCyclesCount(MBB) << "\n";
 		//for(MachineInstr& MI : MBB) {
 	//		detectInstr(MI);
 	//		errs() << "    " << MI.getOpcode() << "  " << ((MI.getOpcode()/10)%14)+1 << "  ";
@@ -822,7 +830,7 @@ bool RISCVBranchBalancer::runOnMachineFunction(MachineFunction& MF) {
 		//	balanceBranchSizes(MF, *MDT);
 		//	balanceBranchCyclesWithNops(MF, *MDT);
 			balanceBranchCycles(MF, *MDT);
-			displayInfo(MF);
+			displayInfo(MF, *MDT);
 			
 			return true;
 }
