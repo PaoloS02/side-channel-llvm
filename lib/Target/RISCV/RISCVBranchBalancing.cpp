@@ -597,7 +597,8 @@ void RISCVBranchBalancer::balanceBranchCyclesWithNops(MachineFunction& MF, Machi
 										}
 									}
 								}
-								notMDTNodes.push_back(dummyMBB);
+								MDT.addNewBlock(dummyMBB, pred);
+								//notMDTNodes.push_back(dummyMBB);
 							} //need a dummy block?
 						} //check brothers
 				
@@ -714,7 +715,6 @@ void RISCVBranchBalancer::balanceBranchSizes(MachineFunction& MF, MachineDominat
 											
 								/*Setting the links with the new block*/
 								BuildMI(*dummyMBB, dummyMBB->end(), MI.getDebugLoc(), TII.get(RISCV::PseudoBR))
-								.addReg(RISCV::X0)
 								.addMBB(succ);
 								
 								//pred->replaceSuccessor(succ, dummyMBB);
@@ -723,11 +723,16 @@ void RISCVBranchBalancer::balanceBranchSizes(MachineFunction& MF, MachineDominat
 										
 								for(MachineInstr &MTerm : pred->terminators()){
 									if(MTerm.isBranch()){
-										if(succ == MTerm.getOperand(MTerm.getNumOperands()-1).getMBB())
-											MTerm.getOperand(MTerm.getNumOperands()-1).setMBB(dummyMBB);
+										for(MachineOperand& MOP : MTerm.operands()){
+											if(MOP.isMBB()){
+												if(succ == MOP.getMBB())
+													MOP.setMBB(dummyMBB);
+											}
+										}
 									}
 								}
-								notMDTNodes.push_back(dummyMBB);
+								MDT.addNewBlock(dummyMBB, pred);
+								//notMDTNodes.push_back(dummyMBB);
 							} //need a dummy block?
 						} //check brothers
 				
@@ -808,6 +813,7 @@ void RISCVBranchBalancer::displayInfo(MachineFunction& MF, MachineDominatorTree&
 			errs() << "  ";
 		}
 		errs() << MBB.getName() << "  cycles: " << blockCyclesCount(MBB) << "\n";
+		//errs() << MBB.getName() << "  cycles: " << MBB.size() << "\n";
 		//for(MachineInstr& MI : MBB) {
 	//		detectInstr(MI);
 	//		errs() << "    " << MI.getOpcode() << "  " << ((MI.getOpcode()/10)%14)+1 << "  ";
