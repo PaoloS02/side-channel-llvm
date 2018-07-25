@@ -1,6 +1,7 @@
 #include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/Support/CommandLine.h"
 #include "RISCVSubtarget.h"
 #include "RISCV.h"
 
@@ -9,6 +10,11 @@ using namespace llvm;
 
 
 #define RISCV_BRANCH_BALANCER_NAME "RISCV Branch Balancer"
+
+static cl::opt<bool>DisplayMode("riscv-cfg-balance-display-mode",
+								cl::desc("Print the clock cicles of each block to stdout after balancing the cfg"),
+								cl::init(false),
+								cl::NotHidden);
 
 struct CostFromMBBToLeaf {
 	MachineBasicBlock *MBB;
@@ -408,6 +414,10 @@ void RISCVBranchBalancer::balanceBranchCycles(MachineFunction& MF, MachineDomina
 						  a dummy block equal in size*/
 						for(MachineBasicBlock *succ : pred->successors()){
 							if(succ != &MBB && isReachableFrom(succ, &MBB)) {
+							/*	BasicBlock *BB = MBB.getBasicBlock();
+								BB->setName(Twine(BB->getName()).concat(Twine(".copy")));
+								MachineBasicBlock *dummyMBB = MF.CreateMachineBasicBlock(BB);
+							*/	
 								MachineBasicBlock *dummyMBB = MF.CreateMachineBasicBlock(MBB.getBasicBlock());
 	//	errs() << "NEED DUMMY  " << MBB.getParent()->getName() << "  " << MBB.getName() << "  succ:  " << succ->getName() << "\n";
 						//dummyMBB->addSuccessor(succ);
@@ -456,6 +466,7 @@ void RISCVBranchBalancer::balanceBranchCycles(MachineFunction& MF, MachineDomina
 									}
 								}
 								
+								//dummyMBB->setName(Twine(dummyMBB->getName()).concat(Twine(".copy")));
 								MDT.addNewBlock(dummyMBB, pred);
 								//notMDTNodes.push_back(dummyMBB);
 							} //need a dummy block?
@@ -836,7 +847,8 @@ bool RISCVBranchBalancer::runOnMachineFunction(MachineFunction& MF) {
 		//	balanceBranchSizes(MF, *MDT);
 		//	balanceBranchCyclesWithNops(MF, *MDT);
 			balanceBranchCycles(MF, *MDT);
-			displayInfo(MF, *MDT);
+			if(DisplayMode)
+				displayInfo(MF, *MDT);
 			
 			return true;
 }
