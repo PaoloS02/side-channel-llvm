@@ -453,6 +453,7 @@ void RISCVBranchBalancer::balanceBranchCycles(MachineFunction& MF, MachineDomina
 		//			errs() << "here  maxCycles:  " << maxCycles << "  dummy size:  " << blockCyclesCount(*dummyMBB) << "\n";			
 								//pred->replaceSuccessor(succ, dummyMBB);
 								pred->removeSuccessor(succ);
+								pred->addSuccessor(dummyMBB);
 								dummyMBB->addSuccessor(succ);
 										
 								for(MachineInstr &MTerm : pred->terminators()){
@@ -596,6 +597,7 @@ void RISCVBranchBalancer::balanceBranchCyclesWithNops(MachineFunction& MF, Machi
 		//			errs() << "here  maxCycles:  " << maxCycles << "  dummy size:  " << blockCyclesCount(*dummyMBB) << "\n";			
 								//pred->replaceSuccessor(succ, dummyMBB);
 								pred->removeSuccessor(succ);
+								pred->addSuccessor(dummyMBB);
 								dummyMBB->addSuccessor(succ);
 										
 								for(MachineInstr &MTerm : pred->terminators()){
@@ -730,6 +732,7 @@ void RISCVBranchBalancer::balanceBranchSizes(MachineFunction& MF, MachineDominat
 								
 								//pred->replaceSuccessor(succ, dummyMBB);
 								pred->removeSuccessor(succ);
+								pred->addSuccessor(dummyMBB);
 								dummyMBB->addSuccessor(succ);
 										
 								for(MachineInstr &MTerm : pred->terminators()){
