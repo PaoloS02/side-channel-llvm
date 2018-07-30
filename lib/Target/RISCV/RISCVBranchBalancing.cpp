@@ -177,36 +177,51 @@ unsigned instrCyclesCount(MachineInstr& MI) {
 			if(MI.getOperand(0).getReg() == RISCV::X0 &&
 			   MI.getOperand(1).getReg() == RISCV::X0 &&
 			   MI.getOperand(2).getImm() == 0)
-			   	return 1;
+			   	return 1; //NOP model
+			else
+				return 1;
 		case RISCV::ADD:
+			return 1;
 		case RISCV::SUB:
-			return 3;
+			return 0;
 		case RISCV::AND:
 		case RISCV::ANDI:
 		case RISCV::OR:
 		case RISCV::ORI:
 		case RISCV::XOR:
 		case RISCV::XORI:
-			return 2;
+			return 1;
+		case RISCV::SLLI:
+			return 0;
 		case RISCV::LW:
 		case RISCV::LH:
 		case RISCV::LB:
 		case RISCV::LBU:
+			return 2;
 		case RISCV::LUI:
-			return 5;
+			return 1;
 		case RISCV::SW:
 		case RISCV::SH:
 		case RISCV::SB:
-			return 4;
+			return 1;
 		case RISCV::BEQ:
+		//case RISCV::C_BEQZ:
 		case RISCV::BNE:
-			return 4;
+			return 2;
 		case RISCV::PseudoBR:
-			return 3;
+			return 1;
 		case RISCV::JAL:	//call instructions
 			return 10;
 		case RISCV::PseudoCALL:
-			return 20;
+			if(MI.getOperand(0).isSymbol()){
+				if(strcmp(MI.getOperand(0).getSymbolName(), "__divsi3")==0)
+					return 19;
+				else if(strcmp(MI.getOperand(0).getSymbolName(), "__mulsi3")==0)
+					return 37;
+				else
+					return 1; //FIXME: unknown symbol
+			}
+			return 1; //FIXME:not external symbol
 		case RISCV::PseudoRET:
 			return 2;
 		default:
@@ -811,7 +826,7 @@ void RISCVBranchBalancer::balanceBlockSizes(MachineFunction& MF) {
 
 
 void RISCVBranchBalancer::displayInfo(MachineFunction& MF, MachineDominatorTree& MDT) {
-	//const TargetInstrInfo *TII = MF.getSubtarget().getInstrInfo();
+	const TargetInstrInfo *TII = MF.getSubtarget().getInstrInfo();
 	unsigned nestLevel = 0;
 	/*const InstrItineraryData *ItinData = MF.getSubtarget().getInstrItineraryData();
 	const InstrStage *IST;
@@ -828,13 +843,13 @@ void RISCVBranchBalancer::displayInfo(MachineFunction& MF, MachineDominatorTree&
 		}
 		errs() << MBB.getName() << "  cycles: " << blockCyclesCount(MBB) << "\n";
 		//errs() << MBB.getName() << "  cycles: " << MBB.size() << "\n";
-		//for(MachineInstr& MI : MBB) {
+		for(MachineInstr& MI : MBB) {
 	//		detectInstr(MI);
 	//		errs() << "    " << MI.getOpcode() << "  " << ((MI.getOpcode()/10)%14)+1 << "  ";
 	//		MI.dump();
 		//	errs() << "      " << MI.getOpcode() << ", cycles: " << "\n";
-		//	errs() << "      " << MI.getOpcode() << ", " << TII->getName(MI.getOpcode()) << "  operands  " << MI.getNumOperands() << "  cycles:  " << instrCyclesCount(MI) << "\n";
-		//}
+			errs() << "      " << MI.getOpcode() << ", " << TII->getName(MI.getOpcode()) << "  operands  " << MI.getNumOperands() << "  cycles:  " << instrCyclesCount(MI) << "\n";
+		}
 	}
 }
 
