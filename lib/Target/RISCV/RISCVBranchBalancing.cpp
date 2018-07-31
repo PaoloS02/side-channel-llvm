@@ -18,7 +18,7 @@ static cl::opt<bool>DisplayMode("riscv-cfg-balance-display-mode",
 
 static cl::opt<bool>EnableBalancing("riscv-cfg-balance",
 								cl::desc("Balance the CFG"),
-								cl::init(true),
+								cl::init(false),
 								cl::NotHidden);
 
 
