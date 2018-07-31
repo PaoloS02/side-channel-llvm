@@ -16,6 +16,13 @@ static cl::opt<bool>DisplayMode("riscv-cfg-balance-display-mode",
 								cl::init(false),
 								cl::NotHidden);
 
+static cl::opt<bool>EnableBalancing("riscv-cfg-balance",
+								cl::desc("Balance the CFG"),
+								cl::init(true),
+								cl::NotHidden);
+
+
+
 struct CostFromMBBToLeaf {
 	MachineBasicBlock *MBB;
 	unsigned int cost;
@@ -855,16 +862,16 @@ void RISCVBranchBalancer::displayInfo(MachineFunction& MF, MachineDominatorTree&
 
 
 bool RISCVBranchBalancer::runOnMachineFunction(MachineFunction& MF) {
-			
 			MDT = &getAnalysis<MachineDominatorTree>();
-			
-			std::vector<costModel> costVector;
-			
-			//balanceBlockSizes(MF);
-			
-		//	balanceBranchSizes(MF, *MDT);
-		//	balanceBranchCyclesWithNops(MF, *MDT);
-			balanceBranchCycles(MF, *MDT);
+
+                        if (EnableBalancing) {
+				std::vector<costModel> costVector;
+				//balanceBlockSizes(MF);
+				//balanceBranchSizes(MF, *MDT);
+				//balanceBranchCyclesWithNops(MF, *MDT);
+				balanceBranchCycles(MF, *MDT);
+			}
+
 			if(DisplayMode)
 				displayInfo(MF, *MDT);
 			
